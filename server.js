@@ -34,12 +34,13 @@ app.post(`/bot${BOT_TOKEN}`, (req, res) => {
     res.sendStatus(200);
 });
 
-// Start Express server (only if using webhooks)
-if (!isLocal) {
-    app.listen(PORT, () => {
-        console.log(`🌍 Webhook server running on port ${PORT}`);
-    });
-}
+// Movie genre mapping
+const genreMap = {
+    28: "Action", 12: "Adventure", 16: "Animation", 35: "Comedy", 80: "Crime",
+    99: "Documentary", 18: "Drama", 10751: "Family", 14: "Fantasy", 36: "History",
+    27: "Horror", 10402: "Music", 9648: "Mystery", 10749: "Romance", 878: "Sci-Fi",
+    10770: "TV Movie", 53: "Thriller", 10752: "War", 37: "Western"
+};
 
 // Handle messages
 bot.on('message', async (msg) => {
@@ -85,7 +86,11 @@ bot.on('callback_query', async (callbackQuery) => {
         { chat_id: chatId, message_id: callbackQuery.message.message_id }
     );
 
+    // Get movie genres
+    const genreNames = selectedMovie.genre_ids.map(id => genreMap[id] ? `#${genreMap[id].toLowerCase()}` : '').join(' ');
+
     let caption = `🎬 *${selectedMovie.title} (${selectedMovie.release_date.slice(0, -6)})*\n\n` +
+                  `📽️ Genre: ${genreNames}\n\n` +
                   `📅 Release Date: ${selectedMovie.release_date}\n` +
                   `⭐ Rating: ${selectedMovie.vote_average}\n\n` +
                   `📝 Overview:\n${selectedMovie.overview}`;
