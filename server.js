@@ -57,6 +57,70 @@ const genreMap = {
   37: "Western",
 }
 
+// Movie language mapping
+const languages = {
+  af: "afrikaans",
+  sq: "albanian",
+  am: "amharic",
+  ar: "arabic",
+  hy: "armenian",
+  az: "azerbaijani",
+  eu: "basque",
+  bn: "bengali",
+  bs: "bosnian",
+  bg: "bulgarian",
+  ca: "catalan",
+  zh: "chinese",
+  hr: "croatian",
+  cs: "czech",
+  da: "danish",
+  nl: "dutch",
+  en: "english",
+  eo: "esperanto",
+  et: "estonian",
+  fi: "finnish",
+  fr: "french",
+  ka: "georgian",
+  de: "german",
+  el: "greek",
+  gu: "gujarati",
+  he: "hebrew",
+  hi: "hindi",
+  hu: "hungarian",
+  is: "icelandic",
+  id: "indonesian",
+  it: "italian",
+  ja: "japanese",
+  kn: "kannada",
+  kk: "kazakh",
+  ko: "korean",
+  lv: "latvian",
+  lt: "lithuanian",
+  mk: "macedonian",
+  ml: "malayalam",
+  mr: "marathi",
+  ms: "malay",
+  nb: "norwegian bokmål",
+  ne: "nepali",
+  fa: "persian",
+  pl: "polish",
+  pt: "portuguese",
+  pa: "punjabi",
+  ro: "romanian",
+  ru: "russian",
+  sr: "serbian",
+  si: "sinhala",
+  sk: "slovak",
+  sl: "slovenian",
+  es: "spanish",
+  sv: "swedish",
+  ta: "tamil",
+  te: "telugu",
+  th: "thai",
+  tr: "turkish",
+  uk: "ukrainian"
+};
+
 // Handle messages
 bot.on("message", async (msg) => {
   const chatId = msg.chat.id
@@ -119,13 +183,15 @@ bot.on("callback_query", async (callbackQuery) => {
     .map((id) => (genreMap[id] ? `#${genreMap[id].toLowerCase()}` : ""))
     .join(" ")
 
+    const language = languages[selectedMovie.original_language]
+
   let caption =
     `🎬 *${selectedMovie.title} (${selectedMovie.release_date.slice(
       0,
       -6
     )})*\n\n` +
     `📽️ Genre: ${genreNames}\n\n` +
-    `🌐 Language: #${selectedMovie.original_language}\n\n` +
+    `🌐 Language: #${language}\n\n` +
     `📅 Release Date: ${selectedMovie.release_date}\n` +
     `⭐ Rating: ${selectedMovie.vote_average}\n\n` +
     `📝 Overview:\n${selectedMovie.overview}`
@@ -133,7 +199,5 @@ bot.on("callback_query", async (callbackQuery) => {
   let posterUrl = `https://image.tmdb.org/t/p/w500${selectedMovie.poster_path}`
 
   bot.sendPhoto(chatId, posterUrl, { caption: caption, parse_mode: "Markdown" })
-
-  console.log(selectedMovie)
 })
 console.log("🤖 Bot is ready!")
