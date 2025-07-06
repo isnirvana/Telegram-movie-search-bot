@@ -7,9 +7,14 @@ const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN
 const MOVIE_API_KEY = process.env.MOVIE_API_KEY
 const WEBHOOK_URL = process.env.WEBHOOK_URL
 const PORT = process.env.PORT || 3000
-const isLocal = process.env.LOCAL === "true" // Check if running locally
+const isLocal = process.env.LOCAL === "true"
 
 let bot
+const app = express()
+app.use(express.json())
+
+// In-memory movie data for each user
+const userMovieData = {}
 
 if (isLocal) {
   console.log("🚀 Running bot in polling mode...")
@@ -20,21 +25,18 @@ if (isLocal) {
   bot.setWebHook(`${WEBHOOK_URL}/bot${BOT_TOKEN}`)
 }
 
-const app = express()
-app.use(express.json())
-
-// Handle root URL ("/") to avoid "Cannot GET /" error
+// Root URL response
 app.get("/", (req, res) => {
   res.send("🤖 Telegram Movie Bot is running!")
 })
 
-// Telegram webhook route
+// Webhook handler
 app.post(`/bot${BOT_TOKEN}`, (req, res) => {
   bot.processUpdate(req.body)
   res.sendStatus(200)
 })
 
-// Movie genre mapping
+// Genre and language maps
 const genreMap = {
   28: "Action",
   12: "Adventure",
@@ -57,7 +59,6 @@ const genreMap = {
   37: "Western",
 }
 
-// Movie language mapping
 const languages = {
   af: "afrikaans",
   sq: "albanian",
@@ -118,10 +119,10 @@ const languages = {
   te: "telugu",
   th: "thai",
   tr: "turkish",
-  uk: "ukrainian"
-};
+  uk: "ukrainian",
+}
 
-// Handle messages
+// Handle user messages
 bot.on("message", async (msg) => {
   const chatId = msg.chat.id
   const query = msg.text
@@ -141,63 +142,136 @@ bot.on("message", async (msg) => {
       }
     )
 
-    let movies = response.data.results.slice(0, 5)
+    const movies = response.data.results.slice(0, 5)
     if (movies.length === 0) {
-      return bot.sendMessage(chatId, "No movies found. Try another title.")
+      return bot.sendMessage(chatId, "❌ No movies found. Try another title.")
     }
 
-    let movieOptions = movies.map((movie, index) => {
-      return [
-        {
-          text: `${movie.title} (${new Date(
-            movie.release_date
-          ).getFullYear()})`,
-          callback_data: JSON.stringify({ index }),
-        },
-      ]
-    })
+    // Save user-specific movie data
+    userMovieData[chatId] = movies
 
-    bot.sendMessage(chatId, "Select a movie:", {
-      reply_markup: { inline_keyboard: movieOptions },
-    })
+    const keyboard = movies.map((movie, index) => [
+      {
+        text: `${movie.title} (${new Date(movie.release_date).getFullYear()})`,
+        callback_data: JSON.stringify({ index }),
+      },
+    ])
 
-    bot.movieData = movies
+    bot.sendMessage(chatId, "🎥 Select a movie:", {
+      reply_markup: { inline_keyboard: keyboard },
+    })
   } catch (error) {
-    bot.sendMessage(chatId, "Error fetching movies. Try again later.")
+    console.error("Movie search error:", error.message)
+    bot.sendMessage(chatId, "⚠️ Error fetching movies. Try again later.")
   }
 })
 
-// Handle button clicks
 bot.on("callback_query", async (callbackQuery) => {
   const chatId = callbackQuery.message.chat.id
-  const data = JSON.parse(callbackQuery.data)
-  const selectedMovie = bot.movieData[data.index]
+  const messageId = callbackQuery.message.message_id
 
-  bot.editMessageReplyMarkup(
-    { inline_keyboard: [] },
-    { chat_id: chatId, message_id: callbackQuery.message.message_id }
-  )
+  let data
+  try {
+    data = JSON.parse(callbackQuery.data)
+  } catch {
+    return bot.sendMessage(chatId, "⚠️ Invalid selection.")
+  }
 
-  // Get movie genres
-  const genreNames = selectedMovie.genre_ids
+  const movies = userMovieData[chatId]
+  if (!movies || !movies[data.index]) {
+    return bot.sendMessage(chatId, "❌ Movie not found. Please search again.")
+  }
+
+  const movie = movies[data.index]
+  const genreNames = movie.genre_ids
     .map((id) => (genreMap[id] ? `#${genreMap[id].toLowerCase()}` : ""))
     .join(" ")
+  const language = languages[movie.original_language] || movie.original_language
+  const trailerLink = `https://www.youtube.com/results?search_query=${encodeURIComponent(
+    movie.title + " trailer"
+  )}`
 
-    const language = languages[selectedMovie.original_language]
+  let overview = movie.overview || "No overview available."
+  if (overview.length > 900) {
+    overview = overview.slice(0, 900) + "..."
+  }
 
-  let caption =
-    `🎬 *${selectedMovie.title} (${selectedMovie.release_date.slice(
-      0,
-      -6
-    )})*\n\n` +
-    `📽️ Genre: ${genreNames}\n\n` +
-    `🌐 Language: #${language}\n\n` +
-    `📅 Release Date: ${selectedMovie.release_date}\n` +
-    `⭐ Rating: ${selectedMovie.vote_average}\n\n` +
-    `📝 Overview:\n${selectedMovie.overview}`
+  const caption =
+    `🎬 *${movie.title} (${movie.release_date?.slice(0, 4)})*\n\n` +
+    `📽️ Genre: ${genreNames}\n` +
+    `🌐 Language: #${language}\n` +
+    `📅 Release Date: ${movie.release_date}\n` +
+    `⭐ Rating: ${movie.vote_average}\n\n` +
+    `📝 Overview:\n${overview}`
 
-  let posterUrl = `https://image.tmdb.org/t/p/w500${selectedMovie.poster_path}`
+  // Remove inline buttons
+  bot.editMessageReplyMarkup(
+    { inline_keyboard: [] },
+    { chat_id: chatId, message_id: messageId }
+  )
 
-  bot.sendPhoto(chatId, posterUrl, { caption: caption, parse_mode: "Markdown" })
+  // Send poster and caption
+  if (movie.poster_path) {
+    const posterUrl = `https://image.tmdb.org/t/p/w500${movie.poster_path}`
+    await bot.sendPhoto(chatId, posterUrl, {
+      caption,
+      parse_mode: "Markdown",
+      disable_web_page_preview: true,
+    })
+  } else {
+    await bot.sendMessage(chatId, caption, {
+      parse_mode: "Markdown",
+      disable_web_page_preview: true,
+    })
+  }
+
+  // Fetch download links from external API
+  try {
+    const result = await axios.get(
+      `https://t4tsa.cc/api/movie?tmdb_id=${movie.id}`
+    )
+    const qualities = result.data.qualities
+
+    const messageLinks = []
+
+    function formatBytes(bytes) {
+      const sizes = ["B", "KB", "MB", "GB", "TB"]
+      if (bytes === 0) return "0 B"
+      const i = Math.floor(Math.log(bytes) / Math.log(1024))
+      return parseFloat((bytes / Math.pow(1024, i)).toFixed(2)) + " " + sizes[i]
+    }
+
+    for (let quality of [
+      "2160p",
+      "1440p",
+      "1080p",
+      "720p",
+      "480p",
+      "unsorted",
+    ]) {
+      for (let file of qualities[quality] || []) {
+        if (file.message_id) {
+          const sizeFormatted = formatBytes(file.file_size)
+          const link = `👉 [${quality} (${sizeFormatted})](https://t.me/Phonofilmbot?start=${file.message_id})`
+          messageLinks.push(link)
+        }
+      }
+    }
+
+    if (messageLinks.length > 0) {
+      const allText = `🎥 *Download Links:*\n\n${messageLinks.join("\n")}`
+      const chunks = allText.match(/[\s\S]{1,4000}/g) // Split into safe Telegram-size chunks
+
+      for (const chunk of chunks) {
+        await bot.sendMessage(chatId, chunk, {
+          parse_mode: "Markdown",
+        })
+      }
+    } else {
+      bot.sendMessage(chatId, "⚠️ No downloadable links found.")
+    }
+  } catch (err) {
+    console.error("Failed to fetch download links:", err.message)
+    bot.sendMessage(chatId, "❌ Couldn't fetch movie download links.")
+  }
 })
-console.log("🤖 Bot is ready!")
