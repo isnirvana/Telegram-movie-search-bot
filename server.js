@@ -198,8 +198,8 @@ bot.on("callback_query", async (callbackQuery) => {
 
   const caption =
     `🎬 *${movie.title} (${movie.release_date?.slice(0, 4)})*\n\n` +
-    `📽️ Genre: ${genreNames}\n` +
-    `🌐 Language: #${language}\n` +
+    `📽️ Genre: ${genreNames}\n\n` +
+    `🌐 Language: #${language}\n\n` +
     `📅 Release Date: ${movie.release_date}\n` +
     `⭐ Rating: ${movie.vote_average}\n\n` +
     `📝 Overview:\n${overview}`
